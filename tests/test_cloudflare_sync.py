@@ -51,9 +51,9 @@ class Base(unittest.TestCase):
     def kube_client(self):
         return cs.Kubernetes(base=self.kube.url, token=FakeKubernetes.TOKEN, namespace="tunnel")
 
-    def sync(self, cfg, dry_run=False):
+    def sync(self, cfg, dry_run=False, validate=False):
         cfg = cs.validate(json.loads(json.dumps(cfg)))
-        client = cs.Cloudflare(FakeCloudflare.TOKEN, self.cf.url, dry_run=dry_run)
+        client = cs.Cloudflare(FakeCloudflare.TOKEN, self.cf.url, dry_run=dry_run, validate=validate)
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             failures = cs.run(cfg, client, self.kube_client)
@@ -203,11 +203,21 @@ class RulesetTests(Base):
         self.assertEqual(self.sync(config(zones=[{"name": "example.com", "customRules": []}])), [])
         self.assertEqual(self.cf.writes(), [])
 
-    def test_dry_run_asks_cloudflare_to_validate(self):
+    def test_dry_run_sends_nothing_but_reads(self):
         cfg = config(zones=[{"name": "example.com", "customRules": [BLOCK]}])
         self.assertEqual(self.sync(cfg, dry_run=True), [], self.output)
+        self.assertEqual([m for m, _, _, _ in self.cf.requests if m != "GET"], [])
+
+    def test_validate_asks_cloudflare_to_check_without_saving(self):
+        cfg = config(zones=[{"name": "example.com", "customRules": [BLOCK]}])
+        self.assertEqual(self.sync(cfg, dry_run=True, validate=True), [], self.output)
         self.assertEqual(self.cf.writes(), [])
-        self.assertTrue(any(q.get("dry_run") == "true" for _, _, q, _ in self.cf.requests))
+        sent = [q for m, _, q, _ in self.cf.requests if m != "GET"]
+        self.assertEqual(sent, [{"dry_run": "true"}])
+
+    def test_validate_without_dry_run_is_ignored(self):
+        client = cs.Cloudflare("t", self.cf.url, dry_run=False, validate=True)
+        self.assertFalse(client.validate)
 
     def test_unknown_zone_fails_that_section_only(self):
         cfg = config(tunnel=TUNNEL, zones=[{"name": "nope.example", "customRules": [BLOCK]}])

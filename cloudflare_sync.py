@@ -21,12 +21,13 @@ Owned objects that are no longer in the config are deleted.
 
 Standard library only. Usage:
 
-  cloudflare_sync.py --config config.json [--dry-run]
+  cloudflare_sync.py --config config.json [--dry-run [--validate]]
 
 Environment:
   CLOUDFLARE_API_TOKEN or CLOUDFLARE_API_TOKEN_FILE   the API token
   CLOUDFLARE_API          API base (default https://api.cloudflare.com/client/v4)
   DRY_RUN=1               same as --dry-run
+  VALIDATE=1              same as --validate
 
 Exit status is non-zero if any section failed, after every section has run.
 """
@@ -161,10 +162,11 @@ def _check_rule(rule, where):
 
 # ----------------------------------------------------------------- Cloudflare ----
 class Cloudflare:
-    def __init__(self, token, base=CF_API, dry_run=False):
+    def __init__(self, token, base=CF_API, dry_run=False, validate=False):
         self.token = token
         self.base = base.rstrip("/")
         self.dry_run = dry_run
+        self.validate = dry_run and validate
         self.writes = 0
         self.zones = {}
 
@@ -449,9 +451,13 @@ def sync_ruleset(cf, zone, zid, key, phase, desired, owner):
         log(f"zone {zone} {key}: owned rules differ from the config (drift or a config change)")
     body = {"rules": [{k: v for k, v in r.items() if k not in RULE_READ_ONLY} for r in kept] + want}
     if cf.dry_run:
-        # Cloudflare validates the whole ruleset without saving it.
-        cf.call("PUT", path, body=body, query={"dry_run": "true"})
-        log(f"zone {zone} {key}: dry-run: would set {len(want)} rule(s); Cloudflare accepted them")
+        if cf.validate:
+            # Opt-in: Cloudflare's schema documents ?dry_run=true as "validates the
+            # request without persisting changes". Still a PUT, so never by default.
+            cf.call("PUT", path, body=body, query={"dry_run": "true"})
+            log(f"zone {zone} {key}: dry-run: would set {len(want)} rule(s); Cloudflare validated them")
+        else:
+            log(f"zone {zone} {key}: dry-run: would set {len(want)} rule(s)")
         return
     cf.write("PUT", path, body, what=f"{key} on {zone}")
     log(f"zone {zone} {key}: set {len(want)} rule(s)")
@@ -574,12 +580,19 @@ def main(argv=None):
     ap.add_argument("--dry-run", action="store_true",
                     default=os.environ.get("DRY_RUN", "") not in ("", "0", "false"),
                     help="read everything, change nothing")
+    ap.add_argument("--validate", action="store_true",
+                    default=os.environ.get("VALIDATE", "") not in ("", "0", "false"),
+                    help="with --dry-run, send ruleset changes to Cloudflare with "
+                         "?dry_run=true to be validated (a PUT Cloudflare documents "
+                         "as not persisted); off by default, so a dry run sends no "
+                         "request that changes anything")
     ap.add_argument("--version", action="version", version=VERSION)
     args = ap.parse_args(argv)
     try:
         with open(args.config) as f:
             cfg = validate(json.load(f))
-        cf = Cloudflare(load_token(), os.environ.get("CLOUDFLARE_API", CF_API), args.dry_run)
+        cf = Cloudflare(load_token(), os.environ.get("CLOUDFLARE_API", CF_API),
+                        args.dry_run, args.validate)
     except (ConfigError, ValueError, OSError) as e:
         log(f"ERROR config: {e}")
         return 2

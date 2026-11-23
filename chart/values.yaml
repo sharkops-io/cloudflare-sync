@@ -10,9 +10,12 @@ schedule: "17 * * * *"
 # post-upgrade hook Job). A failed run then fails the release, so a broken
 # config is seen at deploy time, not an hour later.
 runOnDeploy: true
-# -- Read everything and change nothing; log what would change. Ruleset
-# changes are still sent to Cloudflare with ?dry_run=true to be validated.
+# -- Read everything and change nothing; log what would change. Only GET
+# requests are sent.
 dryRun: false
+# -- With dryRun, also send ruleset changes to Cloudflare with ?dry_run=true
+# so Cloudflare validates them (documented as not persisted, but still a PUT).
+validate: false
 
 # -- The Cloudflare API token, from an existing Secret (required). Scope it to
 # what the config uses; see the README for the permission per section.

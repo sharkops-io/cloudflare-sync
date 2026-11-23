@@ -133,9 +133,11 @@ python3 cloudflare_sync.py --config config.json --dry-run
 python3 cloudflare_sync.py --config config.json
 ```
 
-`--dry-run` (or `DRY_RUN=1`) reads everything and logs what it would change.
-Ruleset changes are still sent to Cloudflare with `?dry_run=true`, so
-Cloudflare checks them without saving.
+`--dry-run` (or `DRY_RUN=1`) reads everything, logs what it would change, and
+sends nothing but GET requests. Add `--validate` (or `VALIDATE=1`) to also send
+ruleset changes to Cloudflare with `?dry_run=true`, which Cloudflare's API
+documents as "validates the request without persisting changes". That is
+still a PUT, so it's off unless you ask for it.
 
 Each section runs even if an earlier one failed. The exit status is `0` when
 everything is in sync, `1` if any section failed, and `2` for a bad config or
@@ -183,8 +185,8 @@ A failed run is a failed Job. Alert on that (for example kube-state-metrics'
   adds don't count as drift. If you delete a key from an object in the config,
   that isn't seen as a change until something else in the object changes.
   Removing a whole rule, route or application is always seen.
-- Cloudflare does not support a dry run for the tunnel, DNS and Access
-  endpoints. For those, `--dry-run` only logs the change it would send.
+- Only the rulesets endpoints offer server-side validation (`--validate`). For
+  the tunnel, DNS and Access endpoints, a dry run only logs what it would send.
 
 ## Development
 

@@ -69,6 +69,8 @@ containers:
             key: {{ .Values.apiToken.key }}
       - name: DRY_RUN
         value: {{ ternary "1" "0" .Values.dryRun | quote }}
+      - name: VALIDATE
+        value: {{ ternary "1" "0" .Values.validate | quote }}
     securityContext:
       {{- toYaml .Values.securityContext | nindent 6 }}
     resources:
