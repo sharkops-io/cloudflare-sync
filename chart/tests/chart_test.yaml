@@ -136,3 +136,10 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: in this release's namespace
+
+  - it: deletes finished Jobs so a failed-Job alert clears
+    template: cronjob.yaml
+    asserts:
+      - equal:
+          path: spec.jobTemplate.spec.ttlSecondsAfterFinished
+          value: 43200

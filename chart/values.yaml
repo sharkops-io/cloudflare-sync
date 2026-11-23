@@ -34,6 +34,9 @@ activeDeadlineSeconds: 300
 backoffLimit: 1
 successfulJobsHistoryLimit: 1
 failedJobsHistoryLimit: 3
+# -- Delete a finished Job (and so clear a failed-Job alert) after this long.
+# Without it a failed Job stays until three newer ones have also failed.
+ttlSecondsAfterFinished: 43200
 
 resources:
   requests:
