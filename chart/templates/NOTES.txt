@@ -1,0 +1,9 @@
+{{- if not .Values.config }}
+cloudflare-sync: `config` is empty, so nothing was deployed. Set at least
+config.accountId and one of tunnel, zones or access (see the README).
+{{- else }}
+cloudflare-sync reconciles on "{{ .Values.schedule }}"{{ if .Values.runOnDeploy }} and on every deploy{{ end }}{{ if .Values.dryRun }}, in DRY-RUN mode (no changes){{ end }}.
+
+Run it now:
+  kubectl -n {{ .Release.Namespace }} create job --from=cronjob/{{ include "cloudflare-sync.fullname" . }} manual-$(date +%s)
+{{- end }}

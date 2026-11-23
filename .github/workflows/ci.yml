@@ -1,0 +1,33 @@
+# Shared steps live in sharkops-io/.github; this file only says which run.
+# One tag vX.Y.Z releases both the image (ghcr.io/sharkops-io/cloudflare-sync:vX.Y.Z)
+# and the chart (oci://ghcr.io/sharkops-io/charts/cloudflare-sync, version X.Y.Z).
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  secret-scan:
+    uses: sharkops-io/.github/.github/workflows/secret-scan.yml@main
+  python:
+    uses: sharkops-io/.github/.github/workflows/python.yml@main
+  chart:
+    needs: [secret-scan, python]
+    uses: sharkops-io/.github/.github/workflows/chart.yml@main
+    with:
+      path: chart
+    permissions:
+      contents: read
+      packages: write
+  image:
+    needs: [secret-scan, python]
+    uses: sharkops-io/.github/.github/workflows/image.yml@main
+    permissions:
+      contents: read
+      packages: write

@@ -1,0 +1,43 @@
+# Every section, as a reference. Each section is managed only when present.
+apiToken:
+  existingSecret: cloudflare-api-token
+config:
+  accountId: 0123456789abcdef0123456789abcdef
+  tunnel:
+    name: edge
+    ingress:
+      - hostname: "*.example.com"
+        service: http://public-gateway.gateway.svc.cluster.local:80
+    dnsAlias:
+      zone: example.com
+      name: tunnel.example.com
+    tokenSecret:
+      name: cloudflared-token
+  zones:
+    - name: example.com
+      customRules:
+        - description: block admin paths from outside the country
+          expression: '(http.request.uri.path contains "/admin" and ip.src.country ne "NL")'
+          action: block
+      rateLimits:
+        - description: login attempts
+          expression: '(http.request.uri.path eq "/login")'
+          action: block
+          ratelimit:
+            characteristics: [ip.src, cf.colo.id]
+            period: 10
+            requests_per_period: 20
+            mitigation_timeout: 10
+  access:
+    apps:
+      - name: Dashboard
+        domain: dash.example.com
+        sessionDuration: 24h
+        policies:
+          - name: staff
+            decision: allow
+            include:
+              - email_domain:
+                  domain: example.com
+cloudflared:
+  enabled: true
