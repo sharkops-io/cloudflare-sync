@@ -1,0 +1,89 @@
+# -- The reconciler image. The tag defaults to the chart's appVersion.
+image:
+  repository: ghcr.io/sharkops-io/cloudflare-sync
+  tag: ""
+  pullPolicy: IfNotPresent
+
+# -- How often to reconcile (CronJob schedule).
+schedule: "17 * * * *"
+# -- Also reconcile once on every install and upgrade (a Helm post-install /
+# post-upgrade hook Job). A failed run then fails the release, so a broken
+# config is seen at deploy time, not an hour later.
+runOnDeploy: true
+# -- Read everything and change nothing; log what would change. Ruleset
+# changes are still sent to Cloudflare with ?dry_run=true to be validated.
+dryRun: false
+
+# -- The Cloudflare API token, from an existing Secret (required). Scope it to
+# what the config uses; see the README for the permission per section.
+apiToken:
+  existingSecret: ""
+  key: token
+
+# -- The reconciler's config, as documented in the README: accountId, owner,
+# tunnel, zones, access. Rendered to JSON in a ConfigMap. Every key is
+# checked: an unknown key fails the run instead of being ignored.
+config: {}
+
+# CronJob behaviour. A failed Job is the alert (e.g. KubeJobFailed).
+startingDeadlineSeconds: 600
+activeDeadlineSeconds: 300
+backoffLimit: 1
+successfulJobsHistoryLimit: 1
+failedJobsHistoryLimit: 3
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    memory: 96Mi
+
+podAnnotations: {}
+podLabels: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
+
+# -- Run cloudflared from the token the reconciler keeps in
+# config.tunnel.tokenSecret (which must be set, in this release's namespace).
+# Off by default; turn it on once the tunnel has been reconciled at least once.
+cloudflared:
+  enabled: false
+  image:
+    repository: cloudflare/cloudflared
+    tag: "2026.11.1"
+    pullPolicy: IfNotPresent
+  replicas: 2
+  # -- Extra arguments placed before `run`, e.g. ["--protocol", "http2"].
+  extraArgs: []
+  metricsPort: 2000
+  # -- Annotations on the Deployment, e.g. for a tool that restarts it when
+  # the token Secret changes. A crash-looping cloudflared also picks up a new
+  # token on its next restart.
+  annotations: {}
+  podAnnotations: {}
+  podLabels: {}
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 128Mi
+  nodeSelector: {}
+  tolerations: []
+  # -- Defaults to spreading the replicas across nodes (preferred, not required).
+  affinity: {}

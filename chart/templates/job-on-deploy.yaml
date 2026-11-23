@@ -1,0 +1,31 @@
+{{- if and .Values.config .Values.runOnDeploy }}
+# One run on every install and upgrade. Helm waits for it, so a config that
+# Cloudflare rejects fails the release. Deleted when it succeeds; a failed one
+# is kept for its logs until the next deploy replaces it.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "cloudflare-sync.fullname" . }}-deploy
+  labels:
+    {{- include "cloudflare-sync.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "0"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: {{ .Values.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        {{- include "cloudflare-sync.selector" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- include "cloudflare-sync.podSpec" . | nindent 6 }}
+{{- end }}

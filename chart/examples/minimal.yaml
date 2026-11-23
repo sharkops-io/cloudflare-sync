@@ -1,0 +1,12 @@
+# Only a tunnel and its token; no WAF, rate-limit or Access management.
+apiToken:
+  existingSecret: cloudflare-api-token
+config:
+  accountId: 0123456789abcdef0123456789abcdef
+  tunnel:
+    name: edge
+    ingress:
+      - hostname: app.example.com
+        service: http://app.default.svc.cluster.local:80
+    tokenSecret:
+      name: cloudflared-token

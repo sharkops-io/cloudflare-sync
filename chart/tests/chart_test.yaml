@@ -1,0 +1,138 @@
+suite: cloudflare-sync chart
+templates:
+  - configmap.yaml
+  - serviceaccount.yaml
+  - rbac.yaml
+  - cronjob.yaml
+  - job-on-deploy.yaml
+  - cloudflared.yaml
+values:
+  - ../examples/minimal.yaml
+tests:
+  - it: renders nothing without a config
+    set:
+      config: null
+      apiToken.existingSecret: ""
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: cronjob.yaml
+      - hasDocuments:
+          count: 0
+        template: configmap.yaml
+
+  - it: requires the API token Secret
+    set:
+      apiToken.existingSecret: ""
+    template: configmap.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: apiToken.existingSecret is required
+
+  - it: writes the config as JSON
+    template: configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["config.json"]
+          pattern: '"name": "edge"'
+
+  - it: runs the reconciler with the token from the Secret and the config mounted
+    template: cronjob.yaml
+    asserts:
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef
+          value: {name: cloudflare-api-token, key: token}
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].args
+          value: ["--config", "/config/config.json"]
+      - equal:
+          path: spec.concurrencyPolicy
+          value: Forbid
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].image
+          value: ghcr.io/sharkops-io/cloudflare-sync:v0.1.0
+
+  - it: mounts a service account token only when it has a Secret to write
+    template: cronjob.yaml
+    set:
+      config.tunnel.tokenSecret: null
+    asserts:
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.automountServiceAccountToken
+          value: false
+
+  - it: limits the Role to the one token Secret
+    template: rbac.yaml
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: rules[0]
+          value: {apiGroups: [""], resources: [secrets], resourceNames: [cloudflared-token], verbs: [get, patch]}
+      - equal:
+          path: rules[1].verbs
+          value: [create]
+
+  - it: makes no Role without a token Secret
+    template: rbac.yaml
+    set:
+      config.tunnel.tokenSecret: null
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: runs once on deploy as a hook
+    template: job-on-deploy.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: post-install,post-upgrade
+
+  - it: can skip the run on deploy
+    template: job-on-deploy.yaml
+    set:
+      runOnDeploy: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: passes dry-run through
+    template: cronjob.yaml
+    set:
+      dryRun: true
+    asserts:
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content: {name: DRY_RUN, value: "1"}
+
+  - it: runs cloudflared from the token Secret
+    template: cloudflared.yaml
+    set:
+      cloudflared.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef
+          value: {name: cloudflared-token, key: token}
+      - equal:
+          path: spec.replicas
+          value: 2
+      - equal:
+          path: spec.template.spec.containers[0].args[-1]
+          value: run
+
+  - it: refuses cloudflared without a token Secret
+    template: configmap.yaml   # the first template to render fails the release
+    set:
+      cloudflared.enabled: true
+      config.tunnel.tokenSecret: null
+    asserts:
+      - failedTemplate:
+          errorPattern: needs config.tunnel.tokenSecret.name
+
+  - it: refuses cloudflared when the token lives in another namespace
+    template: configmap.yaml   # the first template to render fails the release
+    set:
+      cloudflared.enabled: true
+      config.tunnel.tokenSecret.namespace: elsewhere
+    asserts:
+      - failedTemplate:
+          errorPattern: in this release's namespace

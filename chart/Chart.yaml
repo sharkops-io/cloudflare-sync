@@ -1,0 +1,17 @@
+apiVersion: v2
+name: cloudflare-sync
+description: Keep a Cloudflare Tunnel, its routes, WAF and rate-limit rules and Access applications in sync with a config file, from a CronJob
+type: application
+version: 0.1.0
+appVersion: "v0.1.0"
+home: https://github.com/sharkops-io/cloudflare-sync
+sources:
+  - https://github.com/sharkops-io/cloudflare-sync
+maintainers:
+  - name: sharkops-io
+    url: https://github.com/sharkops-io
+keywords:
+  - cloudflare
+  - tunnel
+  - waf
+  - zero-trust

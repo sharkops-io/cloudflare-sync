@@ -1,0 +1,99 @@
+{{- if and .Values.config .Values.cloudflared.enabled }}
+{{- include "cloudflare-sync.validate" . }}
+{{- $c := .Values.cloudflared }}
+{{- $secret := include "cloudflare-sync.tokenSecret" . }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cloudflare-sync.fullname" . }}-cloudflared
+  labels:
+    {{- include "cloudflare-sync.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cloudflared
+  {{- with $c.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ $c.replicas }}
+  selector:
+    matchLabels:
+      {{- include "cloudflare-sync.selector" . | nindent 6 }}
+      app.kubernetes.io/component: cloudflared
+  template:
+    metadata:
+      labels:
+        {{- include "cloudflare-sync.selector" . | nindent 8 }}
+        app.kubernetes.io/component: cloudflared
+        {{- with $c.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with $c.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: cloudflared
+          image: "{{ $c.image.repository }}:{{ $c.image.tag }}"
+          imagePullPolicy: {{ $c.image.pullPolicy }}
+          args:
+            - tunnel
+            - --no-autoupdate
+            - --metrics
+            - "0.0.0.0:{{ $c.metricsPort }}"
+            {{- range $c.extraArgs }}
+            - {{ . | quote }}
+            {{- end }}
+            - run
+          env:
+            - name: TUNNEL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secret }}
+                  key: {{ .Values.config.tunnel.tokenSecret.key | default "token" }}
+          ports:
+            - name: metrics
+              containerPort: {{ $c.metricsPort }}
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: metrics
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: metrics
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 6
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml $c.resources | nindent 12 }}
+      {{- with $c.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $c.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      affinity:
+        {{- if $c.affinity }}
+        {{- toYaml $c.affinity | nindent 8 }}
+        {{- else }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    {{- include "cloudflare-sync.selector" . | nindent 20 }}
+                    app.kubernetes.io/component: cloudflared
+        {{- end }}
+{{- end }}
