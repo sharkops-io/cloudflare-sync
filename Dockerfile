@@ -1,4 +1,4 @@
-FROM python:3.14-alpine3.24
+FROM python:3.15-alpine3.24
 
 # Standard library only: nothing to install.
 COPY cloudflare_sync.py /app/cloudflare_sync.py
